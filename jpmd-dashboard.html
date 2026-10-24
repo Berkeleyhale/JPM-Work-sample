@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JPMD Launch Analytics | Berkeley Hale</title>
+<meta name="description" content="Throughput, reliability, bottleneck and stress analysis from the JPMD deposit token launch.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+.jp { font-family: var(--font-sans); color: var(--color-fg); display: flex; flex-direction: column; gap: var(--cds-gap-xl); max-width: 72rem; margin-inline: auto; }
+.jp h1 { font-family: var(--font-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; }
+.jp .byline { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); margin: var(--cds-gap-xs) 0 0; }
+.jp .lead { font-size: var(--cds-font-size-body); max-width: 62ch; margin: var(--cds-gap-sm) 0 0; line-height: 1.5; }
+.jp .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: var(--cds-gap-md); }
+.jp .tile, .jp .card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); }
+.jp .tile .num { font-family: var(--font-serif); font-weight: 400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; min-height: 1.2em; }
+.jp .tile .lbl { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); margin-top: var(--cds-gap-xs); }
+.jp .sec { display: flex; flex-direction: column; gap: var(--cds-gap-md); }
+.jp .sec-title { font-family: var(--font-serif); font-weight: 400; font-size: var(--cds-font-size-heading); margin: 0; }
+.jp .sec-q { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); margin: 0; }
+.jp h3 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0 0 var(--cds-gap-xs); }
+.jp .note { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); margin: 0 0 var(--cds-gap-md); line-height: 1.5; }
+.jp .note .v { color: var(--color-fg); font-weight: var(--cds-font-weight-medium); font-variant-numeric: tabular-nums; }
+.jp .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: var(--cds-gap-md); }
+.jp .chart { position: relative; min-height: 260px; }
+.jp .chart.short { min-height: 200px; }
+.jp .tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); display: none; white-space: nowrap; z-index: 2; }
+.jp .tip .t { color: var(--cds-text-secondary); margin-bottom: 2px; }
+.jp .tip .row { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.jp .tip .sw { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.jp .legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin-bottom: var(--cds-gap-sm); }
+.jp .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.jp .axis text { fill: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+.jp .axis path, .jp .axis line { stroke: var(--cds-chart-axis); }
+.jp .gridline line { stroke: var(--cds-chart-grid); }
+.jp .gridline path { display: none; }
+.jp table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+.jp th { text-align: left; color: var(--color-fg-muted); font-weight: var(--cds-font-weight-medium); border-bottom: 1px solid var(--color-border-line); padding: var(--cds-pad-xs) var(--cds-pad-sm); }
+.jp td { border-bottom: 1px solid var(--color-border-line); padding: var(--cds-pad-sm); vertical-align: top; line-height: 1.4; }
+.jp .numc { text-align: right; white-space: nowrap; }
+.jp .tbl-wrap { overflow-x: auto; }
+.jp .chosen { color: var(--color-ok); font-weight: var(--cds-font-weight-medium); }
+.jp .later { color: var(--color-fg-muted); }
+.jp .hide-narrow { }
+@media (max-width: 560px) { .jp .hide-narrow { display: none; } }
+.jp .hbars { display: flex; flex-direction: column; gap: var(--cds-gap-sm); }
+.jp .hb-label { font-size: var(--cds-font-size-caption); display: flex; justify-content: space-between; gap: var(--cds-gap-sm); margin-bottom: 3px; }
+.jp .hb-label .muted { color: var(--color-fg-muted); }
+.jp .hb-val { font-variant-numeric: tabular-nums; color: var(--color-fg); white-space: nowrap; }
+.jp .hb-track { position: relative; height: 12px; }
+.jp .hb-bar { position: absolute; left: 0; top: 0; height: 12px; border-radius: 4px; }
+.jp .hb-track.pair { height: 22px; }
+.jp .hb-track.pair .b1 { top: 0; height: 9px; }
+.jp .hb-track.pair .b2 { top: 12px; height: 9px; }
+.jp .hb-row { position: relative; }
+.jp a.src { color: inherit; text-decoration: underline; text-decoration-color: var(--color-border-line); text-underline-offset: 2px; }
+.jp .disclaimer p { margin: 0 0 var(--cds-gap-sm); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); line-height: 1.5; }
+.jp .disclaimer p:last-child { margin: 0; }
+.jp .disclaimer b { color: var(--color-fg); font-weight: var(--cds-font-weight-medium); }
+.jp .fail { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); min-height: 200px; }
+.jp .fail::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
+
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Helvetica, Arial, sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --color-fg: #1f1e1b; --color-fg-muted: #6b6a64; --color-bg: #faf9f5; --color-panel: #ffffff;
+  --color-border-line: #e6e3da; --color-ok: #2f7d4f; --color-bad: #c43c33;
+  --cds-chart-grid: #ece9e0; --cds-chart-axis: #cfcbc0; --cds-chart-reference: #9b978c; --cds-chart-muted: #c9c5ba;
+  --cds-chart-status-critical: #c8463c; --cds-surface-popover: #ffffff; --cds-border: #e0ddd3;
+  --cds-shadow-popover: 0 4px 16px rgba(0,0,0,.10); --cds-text-secondary: #6b6a64;
+  --cds-font-size-caption: 13px; --cds-font-size-body: 15px; --cds-font-size-heading: 17px; --cds-font-size-title: 30px;
+  --cds-font-weight-medium: 560; --cds-radius: 10px;
+  --cds-gap-xs: 4px; --cds-gap-sm: 8px; --cds-gap-md: 16px; --cds-gap-lg: 24px; --cds-gap-xl: 40px;
+  --cds-pad-xs: 4px; --cds-pad-sm: 8px; --cds-pad-md: 12px; --cds-pad-lg: 20px;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --color-fg: #ecebe6; --color-fg-muted: #a3a199; --color-bg: #1c1c1a; --color-panel: #252522;
+  --color-border-line: #383733; --color-ok: #6cc28f; --color-bad: #ef7a70;
+  --cds-chart-grid: #33322e; --cds-chart-axis: #4a4943; --cds-chart-reference: #7d7a71; --cds-chart-muted: #5a5850;
+  --cds-chart-status-critical: #ec6b60; --cds-surface-popover: #2d2d29; --cds-border: #45443f;
+  --cds-shadow-popover: 0 4px 16px rgba(0,0,0,.4); --cds-text-secondary: #a3a199;
+} }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--color-bg); color: var(--color-fg); padding: 40px 16px 64px; -webkit-font-smoothing: antialiased; }
+@media (min-width: 900px) { body { padding: 56px 40px 80px; } }
+</style>
+<script>
+(function () {
+  const DATA = {"headline": [{"id": "network", "label": "Daily volume on the network I studied", "value": 7, "unit": "$B+"}, {"id": "features", "label": "Launch features adopted across teams", "value": 3, "unit": ""}, {"id": "onboarding", "label": "Faster onboarding turnaround", "value": 0.2, "unit": "%"}, {"id": "scenarios", "label": "Risk scenarios stress tested", "value": 20, "unit": ""}, {"id": "systems", "label": "Critical systems mapped", "value": 15, "unit": ""}], "flows": [{"hour": 0, "segment": "Digital asset firms", "volume_m": 58.3}, {"hour": 1, "segment": "Digital asset firms", "volume_m": 63.7}, {"hour": 2, "segment": "Digital asset firms", "volume_m": 74.8}, {"hour": 3, "segment": "Digital asset firms", "volume_m": 69.9}, {"hour": 4, "segment": "Digital asset firms", "volume_m": 73.4}, {"hour": 5, "segment": "Digital asset firms", "volume_m": 66.0}, {"hour": 6, "segment": "Digital asset firms", "volume_m": 55.8}, {"hour": 7, "segment": "Digital asset firms", "volume_m": 52.6}, {"hour": 8, "segment": "Digital asset firms", "volume_m": 43.5}, {"hour": 9, "segment": "Digital asset firms", "volume_m": 44.5}, {"hour": 10, "segment": "Digital asset firms", "volume_m": 43.8}, {"hour": 11, "segment": "Digital asset firms", "volume_m": 49.1}, {"hour": 12, "segment": "Digital asset firms", "volume_m": 59.3}, {"hour": 13, "segment": "Digital asset firms", "volume_m": 71.0}, {"hour": 14, "segment": "Digital asset firms", "volume_m": 68.6}, {"hour": 15, "segment": "Digital asset firms", "volume_m": 71.7}, {"hour": 16, "segment": "Digital asset firms", "volume_m": 74.5}, {"hour": 17, "segment": "Digital asset firms", "volume_m": 72.3}, {"hour": 18, "segment": "Digital asset firms", "volume_m": 60.7}, {"hour": 19, "segment": "Digital asset firms", "volume_m": 51.6}, {"hour": 20, "segment": "Digital asset firms", "volume_m": 50.6}, {"hour": 21, "segment": "Digital asset firms", "volume_m": 41.7}, {"hour": 22, "segment": "Digital asset firms", "volume_m": 49.7}, {"hour": 23, "segment": "Digital asset firms", "volume_m": 50.7}, {"hour": 0, "segment": "Corporate treasury", "volume_m": 7.5}, {"hour": 1, "segment": "Corporate treasury", "volume_m": 7.5}, {"hour": 2, "segment": "Corporate treasury", "volume_m": 7.8}, {"hour": 3, "segment": "Corporate treasury", "volume_m": 8.4}, {"hour": 4, "segment": "Corporate treasury", "volume_m": 7.6}, {"hour": 5, "segment": "Corporate treasury", "volume_m": 8.1}, {"hour": 6, "segment": "Corporate treasury", "volume_m": 8.5}, {"hour": 7, "segment": "Corporate treasury", "volume_m": 9.7}, {"hour": 8, "segment": "Corporate treasury", "volume_m": 16.6}, {"hour": 9, "segment": "Corporate treasury", "volume_m": 33.3}, {"hour": 10, "segment": "Corporate treasury", "volume_m": 70.1}, {"hour": 11, "segment": "Corporate treasury", "volume_m": 123.8}, {"hour": 12, "segment": "Corporate treasury", "volume_m": 176.8}, {"hour": 13, "segment": "Corporate treasury", "volume_m": 169.8}, {"hour": 14, "segment": "Corporate treasury", "volume_m": 126.0}, {"hour": 15, "segment": "Corporate treasury", "volume_m": 76.5}, {"hour": 16, "segment": "Corporate treasury", "volume_m": 35.5}, {"hour": 17, "segment": "Corporate treasury", "volume_m": 16.0}, {"hour": 18, "segment": "Corporate treasury", "volume_m": 10.4}, {"hour": 19, "segment": "Corporate treasury", "volume_m": 8.6}, {"hour": 20, "segment": "Corporate treasury", "volume_m": 7.7}, {"hour": 21, "segment": "Corporate treasury", "volume_m": 8.1}, {"hour": 22, "segment": "Corporate treasury", "volume_m": 8.0}, {"hour": 23, "segment": "Corporate treasury", "volume_m": 8.5}, {"hour": 0, "segment": "Asset managers", "volume_m": 6.2}, {"hour": 1, "segment": "Asset managers", "volume_m": 5.8}, {"hour": 2, "segment": "Asset managers", "volume_m": 6.5}, {"hour": 3, "segment": "Asset managers", "volume_m": 5.6}, {"hour": 4, "segment": "Asset managers", "volume_m": 5.9}, {"hour": 5, "segment": "Asset managers", "volume_m": 6.2}, {"hour": 6, "segment": "Asset managers", "volume_m": 5.7}, {"hour": 7, "segment": "Asset managers", "volume_m": 7.2}, {"hour": 8, "segment": "Asset managers", "volume_m": 20.0}, {"hour": 9, "segment": "Asset managers", "volume_m": 80.1}, {"hour": 10, "segment": "Asset managers", "volume_m": 131.3}, {"hour": 11, "segment": "Asset managers", "volume_m": 79.0}, {"hour": 12, "segment": "Asset managers", "volume_m": 22.9}, {"hour": 13, "segment": "Asset managers", "volume_m": 7.5}, {"hour": 14, "segment": "Asset managers", "volume_m": 20.7}, {"hour": 15, "segment": "Asset managers", "volume_m": 80.4}, {"hour": 16, "segment": "Asset managers", "volume_m": 80.2}, {"hour": 17, "segment": "Asset managers", "volume_m": 19.9}, {"hour": 18, "segment": "Asset managers", "volume_m": 6.9}, {"hour": 19, "segment": "Asset managers", "volume_m": 6.4}, {"hour": 20, "segment": "Asset managers", "volume_m": 6.0}, {"hour": 21, "segment": "Asset managers", "volume_m": 6.2}, {"hour": 22, "segment": "Asset managers", "volume_m": 5.6}, {"hour": 23, "segment": "Asset managers", "volume_m": 6.2}], "features": [{"feature": "Round the clock settlement", "client_signal": "Digital asset firms send a steady share of volume overnight and on weekends", "demand_score": 9, "effort_score": 4, "decision": "Chosen"}, {"feature": "Use as exchange collateral", "client_signal": "Trading clients park cash at exchanges to cover margin", "demand_score": 8, "effort_score": 5, "decision": "Chosen"}, {"feature": "Clients pay their own clients", "client_signal": "Treasury teams forward funds onward within hours of receipt", "demand_score": 7, "effort_score": 4, "decision": "Chosen"}, {"feature": "Euro denominated token", "client_signal": "Cross border clients asked, but volume is still small", "demand_score": 5, "effort_score": 8, "decision": "Later"}, {"feature": "Scheduled conditional payments", "client_signal": "Asked for by a few asset managers only", "demand_score": 4, "effort_score": 7, "decision": "Later"}], "onboarding": [{"step": "Sales intake", "team": "Sales", "order": 1, "days_before": 2, "days_after": 2, "fixed": "No"}, {"step": "Client due diligence", "team": "Compliance", "order": 2, "days_before": 8, "days_after": 5, "fixed": "Yes"}, {"step": "Legal documents", "team": "Legal", "order": 3, "days_before": 7, "days_after": 4, "fixed": "Yes"}, {"step": "Wallet allowlisting", "team": "Operations", "order": 4, "days_before": 4, "days_after": 4, "fixed": "No"}, {"step": "Technical integration", "team": "Engineering", "order": 5, "days_before": 6, "days_after": 6, "fixed": "No"}, {"step": "Go live testing", "team": "Product", "order": 6, "days_before": 3, "days_after": 3, "fixed": "No"}], "failures": [{"cause": "Wallet not on allowlist", "failures": 412, "top3": "Yes"}, {"cause": "Bank ledger sync timeout", "failures": 356, "top3": "Yes"}, {"cause": "Legacy rail cutoff mismatch", "failures": 241, "top3": "Yes"}, {"cause": "Insufficient balance", "failures": 148, "top3": "No"}, {"cause": "Malformed payment instruction", "failures": 97, "top3": "No"}, {"cause": "Other", "failures": 61, "top3": "No"}], "risks": [{"scenario": "Ledger database outage", "system": "Core ledger", "revenue_exposure_m": 420, "hours_to_recover": 10, "fix_first": "Yes"}, {"scenario": "Blockchain network congestion", "system": "Network access", "revenue_exposure_m": 180, "hours_to_recover": 3, "fix_first": "No"}, {"scenario": "Key management failure", "system": "Custody", "revenue_exposure_m": 510, "hours_to_recover": 14, "fix_first": "Yes"}, {"scenario": "Sanctions screening outage", "system": "Compliance", "revenue_exposure_m": 260, "hours_to_recover": 6, "fix_first": "No"}, {"scenario": "Cloud region loss", "system": "Infrastructure", "revenue_exposure_m": 470, "hours_to_recover": 8, "fix_first": "Yes"}, {"scenario": "Wire system outage", "system": "Legacy rails", "revenue_exposure_m": 300, "hours_to_recover": 5, "fix_first": "No"}, {"scenario": "Allowlist service down", "system": "Operations", "revenue_exposure_m": 140, "hours_to_recover": 2, "fix_first": "No"}, {"scenario": "Pricing feed stale", "system": "Market data", "revenue_exposure_m": 90, "hours_to_recover": 1.5, "fix_first": "No"}, {"scenario": "Smart contract bug", "system": "Token contract", "revenue_exposure_m": 380, "hours_to_recover": 18, "fix_first": "Yes"}, {"scenario": "Partner exchange outage", "system": "Partners", "revenue_exposure_m": 120, "hours_to_recover": 4, "fix_first": "No"}, {"scenario": "Settlement reconciliation break", "system": "Back office", "revenue_exposure_m": 220, "hours_to_recover": 9, "fix_first": "No"}, {"scenario": "Identity provider outage", "system": "Access", "revenue_exposure_m": 160, "hours_to_recover": 3, "fix_first": "No"}, {"scenario": "Message queue backlog", "system": "Middleware", "revenue_exposure_m": 200, "hours_to_recover": 2.5, "fix_first": "No"}, {"scenario": "Fraud model failure", "system": "Risk", "revenue_exposure_m": 240, "hours_to_recover": 4, "fix_first": "No"}, {"scenario": "Treasury funding shortfall", "system": "Treasury", "revenue_exposure_m": 350, "hours_to_recover": 6, "fix_first": "No"}, {"scenario": "Monitoring blind spot", "system": "Observability", "revenue_exposure_m": 110, "hours_to_recover": 7, "fix_first": "No"}, {"scenario": "API gateway overload", "system": "Client access", "revenue_exposure_m": 280, "hours_to_recover": 1.5, "fix_first": "No"}, {"scenario": "Data center power loss", "system": "Infrastructure", "revenue_exposure_m": 330, "hours_to_recover": 12, "fix_first": "Yes"}, {"scenario": "Vendor software defect", "system": "Third party", "revenue_exposure_m": 150, "hours_to_recover": 10, "fix_first": "No"}, {"scenario": "Regulatory reporting failure", "system": "Reporting", "revenue_exposure_m": 70, "hours_to_recover": 16, "fix_first": "No"}], "timeline": [{"date": "2025-06-17", "event": "JPMorgan announces a JPMD pilot on Base, Coinbase's public network", "source": "https://www.theblock.co/post/358624/jpmorgan-to-launch-deposit-token-jpmd-on-base-in-pilot-involving-coinbase"}, {"date": "2025-11-12", "event": "JPMD rolls out to institutional clients after test payments with B2C2, Coinbase and Mastercard", "source": "https://www.theblock.co/post/378493/jpmorgan-deposit-token-jpm-coin"}, {"date": "2025-11-12", "event": "JPMD accepted as collateral on Coinbase; more chains and currencies planned pending approval", "source": "https://decrypt.co/348281/jpmorgan-brings-dollar-deposit-token-to-coinbases-base-network-report"}]};
+  const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const calcs = {};
+  window.dash = {
+    colors: dark ? ['#6aa6f0', '#f0a25a', '#5cc49c'] : ['#2c6fc4', '#d9822b', '#2f9b74'],
+    calc: (id, o) => { calcs[id] = o; },
+    data: (id) => {
+      if (DATA[id]) return { status: 'ok', data: DATA[id] };
+      if (calcs[id]) return { status: 'ok', data: calcs[id].fn.apply(null, calcs[id].inputs.map((i) => DATA[i])) };
+      return { status: 'missing', data: [] };
+    },
+    onData: (fn) => { fn(); let t; window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(fn, 120); }); }
+  };
+})();
+</script>
+</head>
+<body>
+<div class="jp">
+  <header>
+    <h1 id="top">JPMD launch analytics</h1>
+    <p class="byline">Berkeley Hale · Product Management Summer Analyst, JPMorganChase Kinexys · Summer 2026</p>
+    <p class="lead">Four questions a hardware team asks about a chip, asked about a payments network: when does the work arrive, why does it fail, where does it stall, and what breaks under stress. Each card below is one of those questions from my work on the JPMD deposit token launch.</p>
+  </header>
+
+  <div class="tiles">
+    <div class="tile"><div class="num" id="t-network">—</div><div class="lbl">Daily volume on the network I studied</div></div>
+    <div class="tile"><div class="num" id="t-features">—</div><div class="lbl">Launch features adopted across 4 teams</div></div>
+    <div class="tile"><div class="num" id="t-onboarding">—</div><div class="lbl">Faster onboarding turnaround</div></div>
+    <div class="tile"><div class="num" id="t-systems">—</div><div class="lbl">Critical systems mapped</div></div>
+    <div class="tile"><div class="num" id="t-scenarios">—</div><div class="lbl">Risk scenarios stress tested</div></div>
+  </div>
+
+  <section class="sec" id="throughput">
+    <div><h2 class="sec-title">1. Throughput: when clients move money</h2><p class="sec-q">Usage patterns decided which launch features came first.</p></div>
+    <div class="grid">
+      <div class="card">
+        <h3>Volume by hour and client type</h3>
+        <p class="note">Sample data, $ millions per hour, Eastern time. Digital asset firms move <span class="v" id="s-ah">—</span> of their volume outside banking hours, while corporate treasury moves only <span class="v" id="s-ah2">—</span>.</p>
+        <div class="legend" id="flows-legend"></div>
+        <div class="chart" id="flows-chart"></div>
+      </div>
+      <div class="card">
+        <h3>How the usage turned into features</h3>
+        <p class="note">Sample data. Candidates scored on client demand and build effort, 1 to 10; the top three shipped.</p>
+        <div class="tbl-wrap">
+          <table id="features-table">
+            <thead><tr><th>Feature</th><th class="hide-narrow">What the data showed</th><th class="numc">Demand</th><th class="numc">Effort</th><th>Decision</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="reliability">
+    <div><h2 class="sec-title">2. Reliability: why payments fail</h2><p class="sec-q">Tracing failures to root causes reordered the roadmap.</p></div>
+    <div class="card">
+      <h3>Failed payments by root cause</h3>
+      <p class="note">Sample data, 12 weeks. Three causes drove <span class="v" id="s-top3">—</span> of <span class="v" id="s-fails">—</span> failed payments, so those were fixed first.</p>
+      <div class="hbars chart short" id="fail-chart"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="bottlenecks">
+    <div><h2 class="sec-title">3. Bottlenecks: where onboarding stalls</h2><p class="sec-q">A 6 team workflow, timed step by step.</p></div>
+    <div class="card">
+      <h3>Days per onboarding step, before and after</h3>
+      <p class="note">Sample data. Removing manual handoffs at the two slowest steps cut total onboarding from <span class="v" id="s-before">—</span> to <span class="v" id="s-after">—</span> days, <span class="v" id="s-cut">—</span> faster.</p>
+      <div class="legend"><span><span class="sw" style="background: var(--cds-chart-muted)"></span>Before</span><span><span class="sw" id="sw-after"></span>After</span></div>
+      <div class="hbars chart" id="onb-chart"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="stress">
+    <div><h2 class="sec-title">4. Stress: what to protect first</h2><p class="sec-q">Scenario planning across the systems behind billion dollar daily flows.</p></div>
+    <div class="card">
+      <h3>Risk scenarios: money at risk vs time to recover</h3>
+      <p class="note">Sample data. <span class="v" id="s-fix">—</span> of 20 scenarios land in the corner that gets fixed first: $300M or more exposed and 8 or more hours to recover.</p>
+      <div class="chart" id="risk-chart"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="context">
+    <div><h2 class="sec-title">Public context</h2><p class="sec-q">What has been reported about JPMD.</p></div>
+    <div class="card">
+      <div class="tbl-wrap">
+        <table id="timeline-table">
+          <thead><tr><th>Date</th><th>What happened</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <div class="card disclaimer" id="about">
+    <p><b>What is real here.</b> The five headline results are from my internship, as on my resume. The public context comes from news reporting, linked in each row.</p>
+    <p><b>What is sample data.</b> JPMorgan's internal figures are confidential, so every chart uses sample numbers shaped like my real analysis. The method, the questions and the decisions are mine; the exact values are not JPMorgan's.</p>
+  </div>
+</div>
+
+<script>
+(function () {
+  const pct0 = d3.format('.0%');
+  const comma = d3.format(',');
+
+  dash.calc('after_hours', {
+    inputs: ['flows'],
+    title: 'Share outside banking hours',
+    description: 'Each client type\'s volume from 5pm to 9am Eastern, divided by its daily total.',
+    fn: (flows) => d3.rollups(flows, (v) => {
+      const all = d3.sum(v, (r) => +r.volume_m);
+      const off = d3.sum(v.filter((r) => +r.hour < 9 || +r.hour >= 17), (r) => +r.volume_m);
+      return off / all;
+    }, (r) => r.segment).map(([segment, share]) => ({ segment, share }))
+  });
+  dash.calc('top3_share', {
+    inputs: ['failures'],
+    title: 'Top three causes share',
+    description: 'Failures from the three largest causes, divided by all failures.',
+    fn: (failures) => {
+      const total = d3.sum(failures, (r) => +r.failures);
+      const top = d3.sum(failures.filter((r) => r.top3 === 'Yes'), (r) => +r.failures);
+      return [{ share: top / total, total }];
+    }
+  });
+  dash.calc('onboarding_total', {
+    inputs: ['onboarding'],
+    title: 'Onboarding total days',
+    description: 'Sum of days across all steps, before and after the fixes.',
+    fn: (onboarding) => {
+      const before = d3.sum(onboarding, (r) => +r.days_before);
+      const after = d3.sum(onboarding, (r) => +r.days_after);
+      return [{ before, after, cut: (before - after) / before }];
+    }
+  });
+  dash.calc('fix_first', {
+    inputs: ['risks'],
+    title: 'Scenarios to fix first',
+    description: 'Count of scenarios marked fix first.',
+    fn: (risks) => [{ count: risks.filter((r) => r.fix_first === 'Yes').length }]
+  });
+
+  function setText(id, ok, txt) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = ok ? txt : '—';
+    el;
+  }
+  function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+  function stateBox(el, d) {
+    clear(el);
+    if (d.status === 'ok') {  return true; }
+    if (d.status === 'error') {
+      
+      const f = document.createElement('div'); f.className = 'fail'; f.textContent = 'Failed to load'; el.appendChild(f);
+    } else {  }
+    return false;
+  }
+  function tipFor(el) {
+    let t = el.querySelector(':scope > .tip');
+    if (!t) { t = document.createElement('div'); t.className = 'tip'; el.appendChild(t); }
+    return t;
+  }
+  function showTip(el, title, lines, x, y) {
+    const t = tipFor(el); clear(t);
+    const h = document.createElement('div'); h.className = 't'; h.textContent = title; t.appendChild(h);
+    lines.forEach((l) => {
+      const r = document.createElement('div'); r.className = 'row';
+      if (l.color) { const s = document.createElement('span'); s.className = 'sw'; s.style.background = l.color; r.appendChild(s); }
+      const n = document.createElement('span'); n.textContent = l.text; r.appendChild(n);
+      t.appendChild(r);
+    });
+    t.style.display = 'block';
+    const w = t.offsetWidth, hh = t.offsetHeight, W = el.clientWidth;
+    let left = x + 14; if (left + w > W - 4) left = x - w - 14; if (left < 0) left = 0;
+    let top = y - hh - 8; if (top < 0) top = y + 14;
+    t.style.left = left + 'px'; t.style.top = top + 'px';
+  }
+  function hideTip(el) { const t = el.querySelector(':scope > .tip'); if (t) t.style.display = 'none'; }
+  const hourLabel = (h) => h === 0 ? '12am' : h < 12 ? h + 'am' : h === 12 ? '12pm' : (h - 12) + 'pm';
+
+  function drawHeadline() {
+    const d = dash.data('headline'); const ok = d.status === 'ok';
+    const by = ok ? new Map(d.data.map((r) => [r.id, +r.value])) : new Map();
+    setText('t-network', ok, '$' + by.get('network') + 'B+');
+    setText('t-features', ok, String(by.get('features')));
+    setText('t-onboarding', ok, pct0(by.get('onboarding')));
+    setText('t-systems', ok, by.get('systems') + '+');
+    setText('t-scenarios', ok, by.get('scenarios') + '+');
+  }
+
+  function drawCalcText() {
+    const ah = dash.data('after_hours'); const ahOk = ah.status === 'ok';
+    const m = ahOk ? new Map(ah.data.map((r) => [r.segment, r.share])) : new Map();
+    setText('s-ah', ahOk, pct0(m.get('Digital asset firms')));
+    setText('s-ah2', ahOk, pct0(m.get('Corporate treasury')));
+    const t3 = dash.data('top3_share'); const t3Ok = t3.status === 'ok' && t3.data.length;
+    setText('s-top3', t3Ok, t3Ok ? pct0(t3.data[0].share) : '');
+    setText('s-fails', t3Ok, t3Ok ? comma(t3.data[0].total) : '');
+    const ot = dash.data('onboarding_total'); const otOk = ot.status === 'ok' && ot.data.length;
+    setText('s-before', otOk, otOk ? String(ot.data[0].before) : '');
+    setText('s-after', otOk, otOk ? String(ot.data[0].after) : '');
+    setText('s-cut', otOk, otOk ? pct0(ot.data[0].cut) : '');
+    const ff = dash.data('fix_first'); const ffOk = ff.status === 'ok' && ff.data.length;
+    setText('s-fix', ffOk, ffOk ? String(ff.data[0].count) : '');
+  }
+
+  function drawFlows() {
+    const el = document.getElementById('flows-chart');
+    const leg = document.getElementById('flows-legend');
+    const d = dash.data('flows');
+    clear(leg);
+    if (!stateBox(el, d)) return;
+    const rows = d.data.map((r) => ({ hour: +r.hour, seg: r.segment, v: +r.volume_m }));
+    const segs = Array.from(new Set(rows.map((r) => r.seg)));
+    const color = (s) => dash.colors[segs.indexOf(s) % dash.colors.length];
+    segs.forEach((s) => {
+      const span = document.createElement('span');
+      const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = color(s);
+      span.appendChild(sw); span.appendChild(document.createTextNode(s)); leg.appendChild(span);
+    });
+    const W = Math.max(el.clientWidth, 280), H = 260, m = { t: 22, r: 12, b: 26, l: 52 };
+    const x = d3.scaleLinear([0, 23], [m.l, W - m.r]);
+    const y = d3.scaleLinear([0, d3.max(rows, (r) => r.v) * 1.08], [H - m.b, m.t]).nice();
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Volume by hour and client type');
+    svg.append('rect').attr('x', x(9)).attr('width', x(17) - x(9)).attr('y', m.t).attr('height', H - m.b - m.t).style('fill', 'var(--cds-chart-grid)').attr('opacity', 0.6).attr('rx', 4);
+    svg.append('text').attr('x', (x(9) + x(17)) / 2).attr('y', m.t - 8).attr('text-anchor', 'middle').style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('Banking hours');
+    svg.append('g').attr('class', 'gridline').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(W - m.l - m.r)).tickFormat('')).attr('font-size', null).attr('font-family', null);
+    const ty = W < 420 ? [0, 6, 12, 18, 23] : [0, 3, 6, 9, 12, 15, 18, 21];
+    svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues(ty).tickFormat(hourLabel).tickSizeOuter(0)).attr('font-size', null).attr('font-family', null);
+    svg.append('g').attr('class', 'axis').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickFormat((v) => '$' + v + 'M').tickSize(0)).attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove());
+    const line = d3.line().x((r) => x(r.hour)).y((r) => y(r.v));
+    const bySeg = d3.group(rows, (r) => r.seg);
+    segs.forEach((s) => {
+      svg.append('path').datum(bySeg.get(s).sort((a, b) => a.hour - b.hour)).style('fill', 'none').style('stroke', color(s)).attr('stroke-width', 2).attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round').attr('d', line);
+    });
+    const rule = svg.append('line').attr('y1', m.t).attr('y2', H - m.b).style('stroke', 'var(--cds-chart-reference)').style('display', 'none');
+    const dots = svg.append('g');
+    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).style('fill', 'transparent')
+      .on('mousemove', function (ev) {
+        const [px, py] = d3.pointer(ev, this);
+        const h = Math.max(0, Math.min(23, Math.round(x.invert(px))));
+        rule.attr('x1', x(h)).attr('x2', x(h)).style('display', null);
+        const at = segs.map((s) => bySeg.get(s).find((r) => r.hour === h)).filter(Boolean);
+        dots.selectAll('circle').data(at).join('circle').attr('cx', (r) => x(r.hour)).attr('cy', (r) => y(r.v)).attr('r', 4).style('fill', (r) => color(r.seg)).style('stroke', 'var(--color-panel)').attr('stroke-width', 2);
+        const scale = el.clientWidth / W;
+        showTip(el, hourLabel(h) + ' Eastern', at.map((r) => ({ color: color(r.seg), text: r.seg + '  $' + r.v.toFixed(1) + 'M' })), x(h) * scale, py * scale);
+      })
+      .on('mouseleave', () => { rule.style('display', 'none'); dots.selectAll('circle').remove(); hideTip(el); });
+  }
+
+  function drawFeatures() {
+    const tb = document.querySelector('#features-table tbody');
+    const d = dash.data('features'); clear(tb);
+    if (d.status !== 'ok') return;
+    d.data.slice().sort((a, b) => (a.decision === b.decision ? b.demand_score - a.demand_score : a.decision === 'Chosen' ? -1 : 1)).forEach((r) => {
+      const tr = document.createElement('tr');
+      const c = (txt, cls) => { const td = document.createElement('td'); if (cls) td.className = cls; td.textContent = txt; tr.appendChild(td); return td; };
+      c(r.feature); c(r.client_signal, 'hide-narrow'); c(String(r.demand_score), 'numc'); c(String(r.effort_score), 'numc');
+      c(r.decision, r.decision === 'Chosen' ? 'chosen' : 'later');
+      tb.appendChild(tr);
+    });
+  }
+
+  function drawFailures() {
+    const el = document.getElementById('fail-chart');
+    const d = dash.data('failures');
+    if (!stateBox(el, d)) return;
+    const rows = d.data.map((r) => ({ cause: r.cause, n: +r.failures, top: r.top3 === 'Yes' })).sort((a, b) => b.n - a.n);
+    const max = d3.max(rows, (r) => r.n), total = d3.sum(rows, (r) => r.n);
+    rows.forEach((r) => {
+      const row = document.createElement('div'); row.className = 'hb-row';
+      const lab = document.createElement('div'); lab.className = 'hb-label';
+      const nm = document.createElement('span'); nm.textContent = r.cause; if (!r.top) nm.className = 'muted';
+      const val = document.createElement('span'); val.className = 'hb-val'; val.textContent = comma(r.n);
+      lab.appendChild(nm); lab.appendChild(val);
+      const tr = document.createElement('div'); tr.className = 'hb-track';
+      const bar = document.createElement('div'); bar.className = 'hb-bar';
+      bar.style.width = (r.n / max * 100) + '%';
+      bar.style.background = r.top ? dash.colors[0] : 'var(--cds-chart-muted)';
+      tr.appendChild(bar); row.appendChild(lab); row.appendChild(tr); el.appendChild(row);
+      row.addEventListener('mousemove', (ev) => {
+        const b = el.getBoundingClientRect();
+        showTip(el, r.cause, [{ text: comma(r.n) + ' failures, ' + pct0(r.n / total) + ' of all' }], ev.clientX - b.left, ev.clientY - b.top);
+      });
+      row.addEventListener('mouseleave', () => hideTip(el));
+    });
+  }
+
+  function drawOnboarding() {
+    const el = document.getElementById('onb-chart');
+    document.getElementById('sw-after').style.background = dash.colors[0];
+    const d = dash.data('onboarding');
+    if (!stateBox(el, d)) return;
+    const rows = d.data.map((r) => ({ step: r.step, team: r.team, order: +r.order, b: +r.days_before, a: +r.days_after, fixed: r.fixed === 'Yes' })).sort((p, q) => p.order - q.order);
+    const max = d3.max(rows, (r) => Math.max(r.a, r.b));
+    rows.forEach((r) => {
+      const row = document.createElement('div'); row.className = 'hb-row';
+      const lab = document.createElement('div'); lab.className = 'hb-label';
+      const nm = document.createElement('span'); nm.textContent = r.step + ' ';
+      const tm = document.createElement('span'); tm.className = 'muted'; tm.textContent = r.team; nm.appendChild(tm);
+      const val = document.createElement('span'); val.className = 'hb-val';
+      val.textContent = r.b === r.a ? r.b + ' days' : r.b + ' to ' + r.a + ' days';
+      lab.appendChild(nm); lab.appendChild(val);
+      const tr = document.createElement('div'); tr.className = 'hb-track pair';
+      const b1 = document.createElement('div'); b1.className = 'hb-bar b1'; b1.style.width = (r.b / max * 100) + '%'; b1.style.background = 'var(--cds-chart-muted)';
+      const b2 = document.createElement('div'); b2.className = 'hb-bar b2'; b2.style.width = (r.a / max * 100) + '%'; b2.style.background = r.fixed ? dash.colors[0] : 'var(--cds-chart-muted)'; if (!r.fixed) b2.style.opacity = '0.55';
+      tr.appendChild(b1); tr.appendChild(b2); row.appendChild(lab); row.appendChild(tr); el.appendChild(row);
+      row.addEventListener('mousemove', (ev) => {
+        const bx = el.getBoundingClientRect();
+        showTip(el, r.step + ', ' + r.team, [{ color: 'var(--cds-chart-muted)', text: 'Before  ' + r.b + ' days' }, { color: dash.colors[0], text: 'After  ' + r.a + ' days' + (r.fixed ? ', fixed' : '') }], ev.clientX - bx.left, ev.clientY - bx.top);
+      });
+      row.addEventListener('mouseleave', () => hideTip(el));
+    });
+  }
+
+  function drawRisks() {
+    const el = document.getElementById('risk-chart');
+    const d = dash.data('risks');
+    if (!stateBox(el, d)) return;
+    const rows = d.data.map((r) => ({ name: r.scenario, sys: r.system, m: +r.revenue_exposure_m, h: +r.hours_to_recover, fix: r.fix_first === 'Yes' }));
+    const W = Math.max(el.clientWidth, 280), H = 300, m = { t: 14, r: 16, b: 40, l: 52 };
+    const x = d3.scaleLinear([0, d3.max(rows, (r) => r.h) * 1.08], [m.l, W - m.r]).nice();
+    const y = d3.scaleLinear([0, d3.max(rows, (r) => r.m) * 1.1], [H - m.b, m.t]).nice();
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Risk scenarios');
+    svg.append('rect').attr('x', x(8)).attr('y', y(y.domain()[1])).attr('width', x(x.domain()[1]) - x(8)).attr('height', y(300) - y(y.domain()[1])).style('fill', 'var(--cds-chart-grid)').attr('opacity', 0.6).attr('rx', 4);
+    svg.append('text').attr('x', x(x.domain()[1]) - 6).attr('y', y(y.domain()[1]) + 16).attr('text-anchor', 'end').style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('Fix first');
+    svg.append('g').attr('class', 'gridline').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickSize(-(W - m.l - m.r)).tickFormat('')).attr('font-size', null).attr('font-family', null);
+    svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(W < 420 ? 4 : 6).tickFormat((v) => v + 'h').tickSizeOuter(0)).attr('font-size', null).attr('font-family', null);
+    svg.append('g').attr('class', 'axis').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat((v) => '$' + v + 'M').tickSize(0)).attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove());
+    svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 6).attr('text-anchor', 'middle').style('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('Hours to recover');
+    [[x(8), x(8), m.t, H - m.b], [m.l, W - m.r, y(300), y(300)]].forEach(([x1, x2, y1, y2]) => svg.append('line').attr('x1', x1).attr('x2', x2).attr('y1', y1).attr('y2', y2).style('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3'));
+    const scale = () => el.clientWidth / W;
+    const g = svg.append('g');
+    g.selectAll('circle.dot').data(rows).join('circle').attr('class', 'dot').attr('cx', (r) => x(r.h)).attr('cy', (r) => y(r.m)).attr('r', 5)
+      .style('fill', (r) => r.fix ? 'var(--cds-chart-status-critical)' : dash.colors[0]).style('fill-opacity', (r) => r.fix ? 1 : 0.7).style('stroke', 'var(--color-panel)').attr('stroke-width', 2);
+    g.selectAll('circle.hit').data(rows).join('circle').attr('class', 'hit').attr('cx', (r) => x(r.h)).attr('cy', (r) => y(r.m)).attr('r', 11).style('fill', 'transparent')
+      .on('mouseenter', (ev, r) => {
+        showTip(el, r.name, [{ text: r.sys }, { text: '$' + r.m + 'M exposed, ' + r.h + ' hours to recover' }].concat(r.fix ? [{ color: 'var(--cds-chart-status-critical)', text: 'Fix first' }] : []), x(r.h) * scale(), y(r.m) * scale());
+      })
+      .on('mouseleave', () => hideTip(el));
+  }
+
+  function drawTimeline() {
+    const tb = document.querySelector('#timeline-table tbody');
+    const d = dash.data('timeline'); clear(tb);
+    if (d.status !== 'ok') return;
+    const f = d3.utcFormat('%b %-d, %Y');
+    d.data.slice().sort((a, b) => (a.date < b.date ? 1 : -1)).forEach((r) => {
+      const tr = document.createElement('tr');
+      const td1 = document.createElement('td'); td1.className = 'numc'; td1.textContent = f(new Date(r.date)); tr.appendChild(td1);
+      const td2 = document.createElement('td');
+      const a = document.createElement('a'); a.className = 'src'; a.textContent = r.event; a.href = String(r.source).startsWith('https://') ? r.source : '#'; a.target = '_blank'; a.rel = 'noopener';
+      td2.appendChild(a); tr.appendChild(td2); tb.appendChild(tr);
+    });
+  }
+
+  dash.onData(() => {
+    drawHeadline(); drawCalcText(); drawFlows(); drawFeatures(); drawFailures(); drawOnboarding(); drawRisks(); drawTimeline();
+  });
+})();
+</script>
+</body>
+</html>
